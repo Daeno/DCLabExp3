@@ -162,30 +162,32 @@ reg			 SRAM_UB_N;
 reg			 SRAM_WE_N;
 
 reg			 LR = 0;
+reg			 Read = 0;
 reg	[19:0] addr_ctr=0;
 wire	[19:0] next_addr_ctr;
 reg	[4:0]	 data_ctr; 
 wire	[4:0]	 next_data_ctr;
 reg	[15:0] data_tmp;
 wire	[15:0] next_data_tmp;
+reg	[15:0] read_tmp;
 reg			 toRecord = 0;
 reg			 ctrl = 0;
 wire	[35:0] GPIO;
-
+reg			 bitstream;
 
 wire 		          		AUD_ADCDAT;
 wire 		          		AUD_ADCLRCK;
 wire 		          		AUD_BCLK;
 wire 		          		AUD_DACLRCK;
 wire 							AUD_DACDAT;
-assign AUD_DACDAT = AUD_ADCDAT;
+assign AUD_DACDAT = Read?bitstream:AUD_ADCDAT;
 
 assign AUD_XCK = clk_12m;
 //=======================================================
 //  Structural coding
 //=======================================================
 assign reset = KEY[0];
-assign next_addr_ctr = (toRecord && addr_ctr <= 4'b1111 )?(addr_ctr + 1):0;
+assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
 //------------LA debug-----------------------------------
 assign GPIO[0] = o_Ready;
 assign GPIO[1] = clk_i2c;
@@ -256,10 +258,12 @@ always @(*) begin
 		end
 		S_FIN: begin
 			go = 0;
-			if(KEY[2] == 0) next_state = S_REC;
+			if(SW[1] == 1) next_state = S_REC;
+			else if(SW[0] == 1) next_state = S_PLAY;
 			else next_state = S_FIN;
 			next_d_ctr = d_ctr;
 			toRecord = 0;
+			Read = 0;
 			ctrl = 0;
 		end
 		S_REC: begin
@@ -270,31 +274,53 @@ always @(*) begin
 			SRAM_UB_N = 0;
 			toRecord = 1;
 			ctrl = 1;
-			if(KEY[3] == 0) next_state = S_FIN;
+			Read = 0;
+			if(SW[1] == 0) next_state = S_FIN;
 			else next_state = S_REC;
+		end
+		S_PLAY: begin
+			SRAM_WE_N = 1;
+			SRAM_CE_N = 0;
+			SRAM_OE_N = 0;
+			SRAM_LB_N = 0;
+			SRAM_UB_N = 0;
+			toRecord = 1;
+			Read = 1;
+			ctrl = 1;
+			if(SW[0] == 0) next_state = S_FIN;
+			else next_state = S_PLAY;
 		end
 	endcase
 end
 assign next_data_ctr = (data_ctr <= 15)?data_ctr + 1:16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
+//FIXIT!! Something wrong
 always @(negedge AUD_BCLK) begin
-	if(LR != AUD_ADCLRCK) begin
-		LR = AUD_ADCLRCK;
-		
-		SRAM_ADDR = addr_ctr;
-		SRAM_DQ = data_tmp;
-		
-		data_ctr = 0;
-		data_tmp = 0;
-		addr_ctr = next_addr_ctr;
-	end
-	else begin
-		data_tmp = next_data_tmp;
-		data_ctr = next_data_ctr;
-		
-		
-		
-	end
+	
+		if(LR != AUD_ADCLRCK) begin
+			LR = AUD_ADCLRCK;
+			
+			SRAM_ADDR = addr_ctr;
+			SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
+			data_ctr = 0;
+			if(Read) begin
+				data_tmp = SRAM_DQ;
+			end
+			else begin
+				data_tmp = 0;
+			end
+			addr_ctr = next_addr_ctr;
+		end
+		else begin
+			if(Read) begin
+				bitstream = (data_ctr < 16)?data_tmp[data_ctr]:0;
+				data_ctr = next_data_ctr;
+			end
+			else begin
+				data_tmp = next_data_tmp;
+				data_ctr = next_data_ctr;
+			end
+		end
 end
 
 always @(negedge reset or posedge clk_i2c) begin
