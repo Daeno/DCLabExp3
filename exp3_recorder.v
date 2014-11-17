@@ -155,7 +155,7 @@ reg	[23:0] ROM[0:10];
 
 reg	[19:0] SRAM_ADDR;
 reg			 SRAM_CE_N;
-wire	[15:0] SRAM_DQ;
+reg	[15:0] SRAM_DQ;
 reg			 SRAM_LB_N;
 reg			 SRAM_OE_N;
 reg			 SRAM_UB_N;
@@ -168,6 +168,8 @@ reg	[4:0]	 data_ctr;
 wire	[4:0]	 next_data_ctr;
 reg	[15:0] data_tmp;
 wire	[15:0] next_data_tmp;
+reg			 toRecord = 0;
+reg			 ctrl = 0;
 wire	[35:0] GPIO;
 
 
@@ -183,7 +185,7 @@ assign AUD_XCK = clk_12m;
 //  Structural coding
 //=======================================================
 assign reset = KEY[0];
-assign next_addr_ctr = addr_ctr + 1;
+assign next_addr_ctr = (toRecord && addr_ctr <= 4'b1111 )?(addr_ctr + 1):0;
 //------------LA debug-----------------------------------
 assign GPIO[0] = o_Ready;
 assign GPIO[1] = clk_i2c;
@@ -194,8 +196,9 @@ assign GPIO[12] =     		AUD_ADCLRCK;
 assign GPIO[13] =     		AUD_BCLK;
 assign GPIO[14] =     		AUD_DACLRCK;
 
-assign GPIO[18:15] = data_ctr;
+assign GPIO[18:15] = addr_ctr;
 assign GPIO[34:19] = data_tmp;
+assign GPIO[35] = ctrl;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
@@ -256,6 +259,8 @@ always @(*) begin
 			if(KEY[2] == 0) next_state = S_REC;
 			else next_state = S_FIN;
 			next_d_ctr = d_ctr;
+			toRecord = 0;
+			ctrl = 0;
 		end
 		S_REC: begin
 			SRAM_WE_N = 0;
@@ -263,6 +268,8 @@ always @(*) begin
 			SRAM_OE_N = 1;
 			SRAM_LB_N = 0;
 			SRAM_UB_N = 0;
+			toRecord = 1;
+			ctrl = 1;
 			if(KEY[3] == 0) next_state = S_FIN;
 			else next_state = S_REC;
 		end
@@ -274,17 +281,18 @@ always @(negedge AUD_BCLK) begin
 	if(LR != AUD_ADCLRCK) begin
 		LR = AUD_ADCLRCK;
 		
-		//SRAM_ADDR = addr_ctr;
-		//SRAM_DQ = data_tmp;
+		SRAM_ADDR = addr_ctr;
+		SRAM_DQ = data_tmp;
 		
 		data_ctr = 0;
 		data_tmp = 0;
+		addr_ctr = next_addr_ctr;
 	end
 	else begin
 		data_tmp = next_data_tmp;
 		data_ctr = next_data_ctr;
 		
-		//addr_ctr = next_addr_ctr;
+		
 		
 	end
 end
