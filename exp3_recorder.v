@@ -137,7 +137,10 @@ parameter S_READY = 4'd0;
 parameter S_SET	= 4'd1;
 parameter S_WAIT	= 4'd2;
 parameter S_FIN	= 4'd3;
-
+parameter S_REC	= 4'd4;
+parameter S_REC_L = 4'd5;
+parameter S_REC_R = 4'd6;
+parameter S_PLAY	= 4'd7;
 
 //=======================================================
 //  REG/WIRE declarations
@@ -149,6 +152,22 @@ reg	[3:0]	state;
 reg	[3:0]	next_state;
 reg	[3:0] d_ctr, next_d_ctr;
 reg	[23:0] ROM[0:10];
+
+reg	[19:0] SRAM_ADDR;
+reg			 SRAM_CE_N;
+wire	[15:0] SRAM_DQ;
+reg			 SRAM_LB_N;
+reg			 SRAM_OE_N;
+reg			 SRAM_UB_N;
+reg			 SRAM_WE_N;
+
+reg			 LR = 0;
+reg	[19:0] addr_ctr=0;
+wire	[19:0] next_addr_ctr;
+reg	[4:0]	 data_ctr; 
+wire	[4:0]	 next_data_ctr;
+reg	[15:0] data_tmp;
+wire	[15:0] next_data_tmp;
 wire	[35:0] GPIO;
 
 
@@ -158,11 +177,14 @@ wire 		          		AUD_BCLK;
 wire 		          		AUD_DACLRCK;
 wire 							AUD_DACDAT;
 assign AUD_DACDAT = AUD_ADCDAT;
+
 assign AUD_XCK = clk_12m;
 //=======================================================
 //  Structural coding
 //=======================================================
 assign reset = KEY[0];
+assign next_addr_ctr = addr_ctr + 1;
+//------------LA debug-----------------------------------
 assign GPIO[0] = o_Ready;
 assign GPIO[1] = clk_i2c;
 assign GPIO[2] = I2C_SCLK;
@@ -171,6 +193,9 @@ assign GPIO[11] =      		AUD_ADCDAT;
 assign GPIO[12] =     		AUD_ADCLRCK;
 assign GPIO[13] =     		AUD_BCLK;
 assign GPIO[14] =     		AUD_DACLRCK;
+
+assign GPIO[18:15] = data_ctr;
+assign GPIO[34:19] = data_tmp;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
@@ -228,11 +253,40 @@ always @(*) begin
 		end
 		S_FIN: begin
 			go = 0;
-			next_state = S_FIN;
+			if(KEY[2] == 0) next_state = S_REC;
+			else next_state = S_FIN;
 			next_d_ctr = d_ctr;
 		end
-		
+		S_REC: begin
+			SRAM_WE_N = 0;
+			SRAM_CE_N = 0;
+			SRAM_OE_N = 1;
+			SRAM_LB_N = 0;
+			SRAM_UB_N = 0;
+			if(KEY[3] == 0) next_state = S_FIN;
+			else next_state = S_REC;
+		end
 	endcase
+end
+assign next_data_ctr = (data_ctr <= 15)?data_ctr + 1:16;
+assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
+always @(negedge AUD_BCLK) begin
+	if(LR != AUD_ADCLRCK) begin
+		LR = AUD_ADCLRCK;
+		
+		//SRAM_ADDR = addr_ctr;
+		//SRAM_DQ = data_tmp;
+		
+		data_ctr = 0;
+		data_tmp = 0;
+	end
+	else begin
+		data_tmp = next_data_tmp;
+		data_ctr = next_data_ctr;
+		
+		//addr_ctr = next_addr_ctr;
+		
+	end
 end
 
 always @(negedge reset or posedge clk_i2c) begin
@@ -254,6 +308,17 @@ always @(negedge reset or posedge clk_i2c) begin
 	else begin
 		state <= next_state;
 		d_ctr <= next_d_ctr;
+		ROM[0]  <= 24'b0011010_0_000_0000_0_1001_0111;
+		ROM[1]  <= 24'b0011010_0_000_0001_0_1001_0111;
+		ROM[2]  <= 24'b0011010_0_000_0010_0_0111_1001;
+		ROM[3]  <= 24'b0011010_0_000_0011_0_0111_1001;
+		ROM[4]  <= 24'b0011010_0_000_0100_0_0001_0101;
+		ROM[5]  <= 24'b0011010_0_000_0101_0_0000_0000;
+		ROM[6]  <= 24'b0011010_0_000_0110_0_0000_0000;
+		ROM[7]  <= 24'b0011010_0_000_0111_0_0100_0010;
+		ROM[8]  <= 24'b0011010_0_000_1000_0_0001_1001;
+		ROM[9]  <= 24'b0011010_0_000_1001_0_0000_0001;
+		ROM[10] <= 24'b0011010_0_000_1111_0_0000_0000;
 	end
 end
 
