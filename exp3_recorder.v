@@ -295,16 +295,17 @@ end
 assign next_data_ctr = (data_ctr <= 15)?data_ctr + 1:16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
 //FIXIT!! Something wrong
+reg first = 0;
 always @(negedge AUD_BCLK) begin
 	
 		if(LR != AUD_ADCLRCK) begin
 			LR = AUD_ADCLRCK;
-			
+			first = 1;
 			SRAM_ADDR = addr_ctr;
 			SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 			data_ctr = 0;
 			if(Read) begin
-				data_tmp = SRAM_DQ;
+				
 			end
 			else begin
 				data_tmp = 0;
@@ -313,6 +314,10 @@ always @(negedge AUD_BCLK) begin
 		end
 		else begin
 			if(Read) begin
+				if(first)begin
+					data_tmp = SRAM_DQ;
+					first = 0;
+				end
 				bitstream = (data_ctr < 16)?data_tmp[data_ctr]:0;
 				data_ctr = next_data_ctr;
 			end
