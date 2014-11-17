@@ -19,9 +19,9 @@ reg CLK_Disable;
 reg RW;
 reg END;
 
-assign a_z = a?1'bz:0;
+assign a_z = a? 1'b1:0;
 assign SDA = RW? a_z: 1'bz;
-assign SCL = CLK_Disable | ( ( (SD_Counter >= 4) & (SD_Counter <= 30))? ~clk:0);
+assign SCL = CLK_Disable | ( ( (SD_Counter >= 4) & (SD_Counter <= 31))? ~clk:0);
 assign ACK = b;
 assign next_b = RW?1:SDA;
 // states
@@ -146,12 +146,13 @@ always @(posedge clk or negedge reset) begin
 			6'd32: begin
 				a = 1;
 				END = 1;
+				RW = 0;
 			end
 		endcase
 	end
 end
 
 always @(negedge clk) begin
-	b = SDA;
+	b = RW?next_b:SDA;
 end
 endmodule

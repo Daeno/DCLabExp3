@@ -142,7 +142,7 @@ parameter S_FIN	= 4'd3;
 //=======================================================
 //  REG/WIRE declarations
 //=======================================================
-wire clk, clk_i2c;
+wire clk, clk_i2c,clk_12m;
 wire reset;
 reg go;
 reg	[3:0]	state;
@@ -158,6 +158,7 @@ wire 		          		AUD_BCLK;
 wire 		          		AUD_DACLRCK;
 wire 							AUD_DACDAT;
 assign AUD_DACDAT = AUD_ADCDAT;
+assign AUD_XCK = clk_12m;
 //=======================================================
 //  Structural coding
 //=======================================================
@@ -173,7 +174,8 @@ assign GPIO[14] =     		AUD_DACLRCK;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
-		.c1(clk_i2c)
+		.c1(clk_i2c),
+		.c2(clk_12m)
 	);
 
 inout_port u2(
