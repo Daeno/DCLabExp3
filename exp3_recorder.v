@@ -163,14 +163,15 @@ reg			 SRAM_WE_N;
 
 reg			 LR = 0;
 reg			 Read = 0;
-reg	[18:0] addr_ctr=0;
+reg	[19:0] addr_ctr=0;
 reg	[19:0] addr_ctr2=0;
-wire	[18:0] next_addr_ctr;
+wire	[19:0] next_addr_ctr;
 wire	[19:0] next_addr_ctr2;
 reg	[4:0]	 data_ctr; 
 wire	[4:0]	 next_data_ctr;
 reg	[15:0] data_tmp;
 reg	[15:0] data_tmp2;
+reg			 toWrite = 0;
 wire	[15:0] next_data_tmp;
 wire	[15:0] next_data_tmp2;
 reg	[15:0] read_tmp;
@@ -201,9 +202,9 @@ assign GPIO[12] =     		AUD_ADCLRCK;
 assign GPIO[13] =     		AUD_BCLK;
 assign GPIO[14] =     		AUD_DACLRCK;
 
-assign GPIO[18:15] = data_ctr;
+assign GPIO[18:15] = addr_ctr;
 assign GPIO[34:19] = Read?data_tmp2:data_tmp;
-assign GPIO[35] = ctrl;
+assign GPIO[35] = toWrite;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
@@ -280,7 +281,7 @@ always @(*) begin
 			SRAM_UB_N = 0;
 		end
 		S_REC: begin
-			SRAM_WE_N = 0;
+			SRAM_WE_N = ~toWrite;
 			SRAM_CE_N = 0;
 			SRAM_OE_N = 0;
 			SRAM_LB_N = 0;
@@ -308,12 +309,12 @@ end
 
 reg	 adder = 0;
 
-assign next_addr_ctr = (toRecord && addr_ctr <= 19'b1111111111111111111 )?(addr_ctr + ~LR):0;
+assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
 assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + adder):0;
 assign next_data_ctr = (data_ctr <= 15)?(data_ctr + 1):16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
 assign next_data_tmp2 = data_tmp2;
-assign SRAM_ADDR =  (Read?addr_ctr2:{ addr_ctr, LR });
+assign SRAM_ADDR =  (Read?addr_ctr2:addr_ctr);
 assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 
 //FIXIT!! Something wrong
@@ -324,7 +325,7 @@ always @(negedge AUD_BCLK) begin
 		adder = 0;
 		if(LR != AUD_ADCLRCK) begin
 			LR = AUD_ADCLRCK;
-
+			toWrite = LR;
 			data_ctr = 0;
 			first  = 1;
 			if(Read) begin
@@ -333,8 +334,9 @@ always @(negedge AUD_BCLK) begin
 			end
 			else begin
 				data_tmp = 0;
+				
 			end
-			addr_ctr = next_addr_ctr;
+			if(LR == 0) addr_ctr = next_addr_ctr;
 			addr_add = 0;
 		end
 		else begin
@@ -353,7 +355,9 @@ always @(negedge AUD_BCLK) begin
 			end
 			else begin
 				data_tmp = next_data_tmp;
+				if(data_ctr == 16) toWrite = 0;
 				data_ctr = next_data_ctr;
+				
 			end
 		end
 end
