@@ -204,7 +204,7 @@ assign GPIO[14] =     		AUD_DACLRCK;
 
 assign GPIO[18:15] = addr_ctr;
 assign GPIO[34:19] = Read?data_tmp2:data_tmp;
-assign GPIO[35] = toWrite;
+assign GPIO[35] = ctrl;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
@@ -307,7 +307,7 @@ always @(*) begin
 	endcase
 end
 
-reg	 adder = 0;
+reg	[2:0] adder = 0;
 
 assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
 assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + adder):0;
@@ -348,7 +348,7 @@ always @(negedge AUD_BCLK) begin
 				data_ctr = next_data_ctr;
 				bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
 				if(data_ctr == 16 && ~addr_add) begin
-					adder = LR? 1:0;
+					adder = LR? SW[4:2]:0;
 					addr_add = 1;
 				end
 				//data_tmp2 = next_data_tmp2;
