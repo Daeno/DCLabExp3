@@ -36,7 +36,7 @@ reg [23:0]	SD;
 reg FAIL;
 // combinational circuit
 assign oReady = END;
-assign next_SD_Counter = FAIL?SD_Counter - 9:SD_Counter + 1;
+assign next_SD_Counter = FAIL?32:SD_Counter + 1;
 assign ctr = SD_Counter;
 //-----------------------------------
 always @(negedge reset or negedge clk )

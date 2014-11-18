@@ -193,7 +193,7 @@ assign AUD_XCK = clk_12m;
 //=======================================================
 assign reset = KEY[0];
 //------------LA debug-----------------------------------
-assign GPIO[0] = o_Ready;
+assign GPIO[0] = clk;
 assign GPIO[1] = clk_i2c;
 assign GPIO[2] = I2C_SCLK;
 assign GPIO[3] = I2C_SDAT;
@@ -202,9 +202,9 @@ assign GPIO[12] =     		AUD_ADCLRCK;
 assign GPIO[13] =     		AUD_BCLK;
 assign GPIO[14] =     		AUD_DACLRCK;
 
-assign GPIO[18:15] = addr_ctr;
+//assign GPIO[18:15] = addr_ctr;
 assign GPIO[34:19] = Read?data_tmp2:data_tmp;
-assign GPIO[35] = ctrl;
+//assign GPIO[35] = ctrl;
 pll u1(
 		.inclk0(CLOCK_50),
 		.c0(clk),
@@ -223,6 +223,18 @@ inout_port u2(
 		.SDA(I2C_SDAT),
 		.ACK(GPIO[4]),
 		.ctr(GPIO[10:5])
+);
+
+LED_ctrl u3(
+		.clk(clk),
+		.reset(reset),
+		.LCD_BLON(LCD_BLON),
+		.LCD_DATA(LCD_DATA),
+  		.LCD_EN(LCD_EN),
+		.LCD_ON(LCD_ON),
+		.LCD_RS(LCD_RS),
+		.LCD_RW(LCD_RW),
+		.Ready(GPIO[18:15])
 );
 
 always @(*) begin
