@@ -153,9 +153,9 @@ reg	[3:0]	next_state;
 reg	[3:0] d_ctr, next_d_ctr;
 reg	[23:0] ROM[0:10];
 
-reg	[19:0] SRAM_ADDR;
+wire	[19:0] SRAM_ADDR;
 reg			 SRAM_CE_N;
-reg	[15:0] SRAM_DQ;
+wire	[15:0] SRAM_DQ;
 reg			 SRAM_LB_N;
 reg			 SRAM_OE_N;
 reg			 SRAM_UB_N;
@@ -164,11 +164,15 @@ reg			 SRAM_WE_N;
 reg			 LR = 0;
 reg			 Read = 0;
 reg	[19:0] addr_ctr=0;
+reg	[19:0] addr_ctr2=0;
 wire	[19:0] next_addr_ctr;
+wire	[19:0] next_addr_ctr2;
 reg	[4:0]	 data_ctr; 
 wire	[4:0]	 next_data_ctr;
 reg	[15:0] data_tmp;
+reg	[15:0] data_tmp2;
 wire	[15:0] next_data_tmp;
+wire	[15:0] next_data_tmp2;
 reg	[15:0] read_tmp;
 reg			 toRecord = 0;
 reg			 ctrl = 0;
@@ -187,19 +191,18 @@ assign AUD_XCK = clk_12m;
 //  Structural coding
 //=======================================================
 assign reset = KEY[0];
-assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
 //------------LA debug-----------------------------------
 assign GPIO[0] = o_Ready;
 assign GPIO[1] = clk_i2c;
 assign GPIO[2] = I2C_SCLK;
 assign GPIO[3] = I2C_SDAT;
-assign GPIO[11] =      		AUD_ADCDAT;
+assign GPIO[11] =      		AUD_DACDAT;
 assign GPIO[12] =     		AUD_ADCLRCK;
 assign GPIO[13] =     		AUD_BCLK;
 assign GPIO[14] =     		AUD_DACLRCK;
 
-assign GPIO[18:15] = addr_ctr;
-assign GPIO[34:19] = data_tmp;
+assign GPIO[18:15] = data_ctr;
+assign GPIO[34:19] = Read?data_tmp2:data_tmp;
 assign GPIO[35] = ctrl;
 pll u1(
 		.inclk0(CLOCK_50),
@@ -224,10 +227,15 @@ inout_port u2(
 always @(*) begin
 	case(state)
 		S_READY: begin
-			if(KEY[1] == 0) next_state = S_SET;
-			else next_state = S_READY;
+			next_state = S_SET;
+			//else next_state = S_READY;
 			next_d_ctr = d_ctr;
 			go = 0;
+			SRAM_WE_N = 1;
+			SRAM_CE_N = 0;
+			SRAM_OE_N = 0;
+			SRAM_LB_N = 0;
+			SRAM_UB_N = 0;
 		end
 		S_SET: begin
 			go = 1;
@@ -269,7 +277,7 @@ always @(*) begin
 		S_REC: begin
 			SRAM_WE_N = 0;
 			SRAM_CE_N = 0;
-			SRAM_OE_N = 1;
+			SRAM_OE_N = 0;
 			SRAM_LB_N = 0;
 			SRAM_UB_N = 0;
 			toRecord = 1;
@@ -292,34 +300,52 @@ always @(*) begin
 		end
 	endcase
 end
-assign next_data_ctr = (data_ctr <= 15)?data_ctr + 1:16;
+
+reg	 adder = 0;
+
+assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
+assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + adder):0;
+assign next_data_ctr = (data_ctr <= 15)?(data_ctr + 1):16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
+assign next_data_tmp2 = data_tmp2;
+assign SRAM_ADDR = Read?addr_ctr2: addr_ctr;
+assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
+
 //FIXIT!! Something wrong
 reg first = 0;
+reg addr_add = 0;
 always @(negedge AUD_BCLK) begin
-	
+		addr_ctr2 = next_addr_ctr2;
+		adder = 0;
 		if(LR != AUD_ADCLRCK) begin
 			LR = AUD_ADCLRCK;
-			first = 1;
-			SRAM_ADDR = addr_ctr;
-			SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
+
 			data_ctr = 0;
+			first  = 1;
 			if(Read) begin
-				
+				data_tmp2 = SRAM_DQ;
+				bitstream = data_tmp2[15];
 			end
 			else begin
 				data_tmp = 0;
 			end
 			addr_ctr = next_addr_ctr;
+			
+			addr_add = 0;
 		end
 		else begin
 			if(Read) begin
-				if(first)begin
-					data_tmp = SRAM_DQ;
+				if(first) begin
+					data_tmp2 = SRAM_DQ;
 					first = 0;
 				end
-				bitstream = (data_ctr < 16)?data_tmp[data_ctr]:0;
 				data_ctr = next_data_ctr;
+				bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
+				if(data_ctr == 16 && ~addr_add) begin
+					adder = 1;
+					addr_add = 1;
+				end
+				//data_tmp2 = next_data_tmp2;
 			end
 			else begin
 				data_tmp = next_data_tmp;
@@ -328,7 +354,7 @@ always @(negedge AUD_BCLK) begin
 		end
 end
 
-always @(negedge reset or posedge clk_i2c) begin
+always @(negedge reset or posedge clk_12m) begin
 	if(!reset)begin
 		state <= S_READY;
 		ROM[0]  <= 24'b0011010_0_000_0000_0_1001_0111;
