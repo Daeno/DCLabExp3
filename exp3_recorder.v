@@ -163,9 +163,9 @@ reg			 SRAM_WE_N;
 
 reg			 LR = 0;
 reg			 Read = 0;
-reg	[19:0] addr_ctr=0;
+reg	[18:0] addr_ctr=0;
 reg	[19:0] addr_ctr2=0;
-wire	[19:0] next_addr_ctr;
+wire	[18:0] next_addr_ctr;
 wire	[19:0] next_addr_ctr2;
 reg	[4:0]	 data_ctr; 
 wire	[4:0]	 next_data_ctr;
@@ -273,6 +273,11 @@ always @(*) begin
 			toRecord = 0;
 			Read = 0;
 			ctrl = 0;
+			SRAM_WE_N = 1;
+			SRAM_CE_N = 0;
+			SRAM_OE_N = 0;
+			SRAM_LB_N = 0;
+			SRAM_UB_N = 0;
 		end
 		S_REC: begin
 			SRAM_WE_N = 0;
@@ -303,12 +308,12 @@ end
 
 reg	 adder = 0;
 
-assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
+assign next_addr_ctr = (toRecord && addr_ctr <= 19'b1111111111111111111 )?(addr_ctr + ~LR):0;
 assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + adder):0;
 assign next_data_ctr = (data_ctr <= 15)?(data_ctr + 1):16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
 assign next_data_tmp2 = data_tmp2;
-assign SRAM_ADDR = Read?addr_ctr2: addr_ctr;
+assign SRAM_ADDR =  (Read?addr_ctr2:{ addr_ctr, LR });
 assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 
 //FIXIT!! Something wrong
@@ -330,7 +335,6 @@ always @(negedge AUD_BCLK) begin
 				data_tmp = 0;
 			end
 			addr_ctr = next_addr_ctr;
-			
 			addr_add = 0;
 		end
 		else begin
@@ -342,7 +346,7 @@ always @(negedge AUD_BCLK) begin
 				data_ctr = next_data_ctr;
 				bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
 				if(data_ctr == 16 && ~addr_add) begin
-					adder = 1;
+					adder = LR? 1:0;
 					addr_add = 1;
 				end
 				//data_tmp2 = next_data_tmp2;
