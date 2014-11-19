@@ -195,14 +195,14 @@ assign AUD_XCK = clk_12m;
 //=======================================================
 assign reset = KEY[0];
 //------------LA debug-----------------------------------
-assign GPIO[0] = clk;
-assign GPIO[1] = clk_i2c;
-assign GPIO[2] = I2C_SCLK;
-assign GPIO[3] = I2C_SDAT;
-//assign GPIO[11] =      		AUD_DACDAT;
-//assign GPIO[12] =     		AUD_ADCLRCK;
-//assign GPIO[13] =     		AUD_BCLK;
-//assign GPIO[14] =     		AUD_DACLRCK;
+//assign GPIO[0] = clk;
+//assign GPIO[1] = clk_i2c;
+//assign GPIO[2] = I2C_SCLK;
+//assign GPIO[3] = I2C_SDAT;
+assign GPIO[0] =      		AUD_DACDAT;
+assign GPIO[1] =     		AUD_ADCLRCK;
+assign GPIO[2] =     		AUD_BCLK;
+assign GPIO[3] =     		AUD_DACLRCK;
 
 //assign GPIO[18:15] = addr_ctr;
 //assign GPIO[34:19] = Read?data_tmp2:data_tmp;
@@ -323,11 +323,12 @@ end
 
 reg	[3:0] adder = 0;
 reg signed	[4:0] cumulator = 0;
-reg signed	[16:0] prev_data_tmp;
-reg signed	[16:0] interpolate_data = 0;
-reg signed	[17:0] out_data;
+reg signed	[20:0] prev_data_tmp;
+reg signed	[20:0] next_prev_data_tmp;
+reg signed	[20:0] interpolate_data = 0;
+reg signed	[20:0] out_data;
 
-wire signed  [3:0] next_cumulator;
+wire signed  [4:0] next_cumulator;
 assign next_cumulator = (cumulator >= SW[7:5])?0:cumulator + 1;
 assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):20'b11111111111111111111; 		//Write
 assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + ((cumulator==0)?adder:0)):0; 	//Read
@@ -341,9 +342,9 @@ assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 assign GPIO[19:4] = data_tmp2;
 assign GPIO[35:20] = prev_data_tmp;
 reg addr_add = 0;
-wire signed [3:0] divider; 
+wire signed [4:0] divider; 
 assign divider = {1'b0,SW[7:5]};
-reg signed [17:0] tmp;
+reg signed [20:0] tmp;
 always @(negedge AUD_BCLK) begin
 		addr_ctr2 = next_addr_ctr2;
 		adder = 0;
@@ -356,8 +357,8 @@ always @(negedge AUD_BCLK) begin
 				
 				data_tmp2 = SRAM_DQ;
 				interpolate_data = (data_tmp2 - prev_data_tmp)/(divider + 1'sd1); 
-				tmp = (prev_data_tmp+interpolate_data*cumulator);
-				bitstream = (SW[8]==1)?tmp[17]:data_tmp2[15];
+				tmp = (prev_data_tmp*cumulator/(divider + 1'sd1) + data_tmp2*(divider - cumulator)/(divider + 1'sd1));
+				bitstream = (SW[8]==1)?prev_data_tmp[20]:data_tmp2[15];
 			end
 			else begin
 				data_tmp = 0;
@@ -365,8 +366,12 @@ always @(negedge AUD_BCLK) begin
 			if(LR == 0 )begin
 				addr_ctr = next_addr_ctr;
 				cumulator = next_cumulator;
+				prev_data_tmp = next_prev_data_tmp;
 				if(cumulator == 0) begin 
-					prev_data_tmp = data_tmp2;
+					next_prev_data_tmp = data_tmp2;
+				end
+				else begin
+					next_prev_data_tmp = prev_data_tmp;
 				end
 				
 			end
@@ -380,7 +385,7 @@ always @(negedge AUD_BCLK) begin
 				data_ctr = next_data_ctr;
 				//bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
 				if(SW[8] == 1)
-					out_data = (prev_data_tmp + interpolate_data*cumulator);
+					out_data = (prev_data_tmp*cumulator/(divider + 1'sd1) + data_tmp2*(divider + 1'sd1 - cumulator)/(divider + 1'sd1));
 				else
 					out_data = data_tmp2;
 				bitstream = (data_ctr < 16)?out_data[15-data_ctr]:0;
