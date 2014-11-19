@@ -321,10 +321,12 @@ end
 
 reg	[3:0] adder = 0;
 reg	[3:0] cumulator = 0;
+reg	[15:0] prev_data_tmp;
+
 wire  [3:0] next_cumulator;
 assign next_cumulator = (cumulator >= SW[7:5])?0:cumulator + 1;
-assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0; //Write
-assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + ((cumulator==0)?adder:0)):0; //Read
+assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):20'b11111111111111111111; 		//Write
+assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + ((cumulator==0)?adder:0)):0; 	//Read
 assign next_data_ctr = (data_ctr <= 15)?(data_ctr + 1):16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
 assign next_data_tmp2 = data_tmp2;
@@ -332,7 +334,6 @@ assign SRAM_ADDR =  (Read?addr_ctr2:addr_ctr);
 assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 
 
-reg first = 0;
 reg addr_add = 0;
 always @(negedge AUD_BCLK) begin
 		addr_ctr2 = next_addr_ctr2;
@@ -343,14 +344,13 @@ always @(negedge AUD_BCLK) begin
 			
 			toWrite = LR;
 			data_ctr = 0;
-			first  = 1;
 			if(Read) begin
+				prev_data_tmp = data_tmp2;
 				data_tmp2 = SRAM_DQ;
 				bitstream = data_tmp2[15];
 			end
 			else begin
 				data_tmp = 0;
-				
 			end
 			if(LR == 0 )begin
 				addr_ctr = next_addr_ctr;
@@ -360,10 +360,6 @@ always @(negedge AUD_BCLK) begin
 		end
 		else begin
 			if(Read) begin
-				if(first) begin
-					data_tmp2 = SRAM_DQ;
-					first = 0;
-				end
 				data_ctr = next_data_ctr;
 				bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
 				if(data_ctr == 16 && ~addr_add) begin
