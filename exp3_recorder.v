@@ -319,24 +319,28 @@ always @(*) begin
 	endcase
 end
 
-reg	[2:0] adder = 0;
-
-assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0;
-assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + adder):0;
+reg	[3:0] adder = 0;
+reg	[3:0] cumulator = 0;
+wire  [3:0] next_cumulator;
+assign next_cumulator = (cumulator >= SW[7:5])?0:cumulator + 1;
+assign next_addr_ctr = (toRecord && addr_ctr <= 20'b11111111111111111111 )?(addr_ctr + 1):0; //Write
+assign next_addr_ctr2 = (toRecord && addr_ctr2 <= 20'b11111111111111111111 )?(addr_ctr2 + ((cumulator==0)?adder:0)):0; //Read
 assign next_data_ctr = (data_ctr <= 15)?(data_ctr + 1):16;
 assign next_data_tmp = (data_ctr <= 15)?((data_tmp *2) + AUD_ADCDAT):data_tmp;
 assign next_data_tmp2 = data_tmp2;
 assign SRAM_ADDR =  (Read?addr_ctr2:addr_ctr);
 assign SRAM_DQ = Read?16'bzzzzzzzzzzzzzzzz: data_tmp;
 
-//FIXIT!! Something wrong
+
 reg first = 0;
 reg addr_add = 0;
 always @(negedge AUD_BCLK) begin
 		addr_ctr2 = next_addr_ctr2;
+		
 		adder = 0;
 		if(LR != AUD_ADCLRCK) begin
 			LR = AUD_ADCLRCK;
+			
 			toWrite = LR;
 			data_ctr = 0;
 			first  = 1;
@@ -348,7 +352,10 @@ always @(negedge AUD_BCLK) begin
 				data_tmp = 0;
 				
 			end
-			if(LR == 0) addr_ctr = next_addr_ctr;
+			if(LR == 0 )begin
+				addr_ctr = next_addr_ctr;
+				cumulator = next_cumulator;
+			end
 			addr_add = 0;
 		end
 		else begin
@@ -360,7 +367,7 @@ always @(negedge AUD_BCLK) begin
 				data_ctr = next_data_ctr;
 				bitstream = (data_ctr < 16)?data_tmp2[15-data_ctr]:0;
 				if(data_ctr == 16 && ~addr_add) begin
-					adder = LR? SW[4:2]:0;
+					adder = LR? (SW[4:2]+1):0;
 					addr_add = 1;
 				end
 				//data_tmp2 = next_data_tmp2;
